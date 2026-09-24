@@ -5,3 +5,9 @@
 .httr-oauth
 .DS_Store
 .quarto
+
+01_data/raw/
+*.tif
+*.geotiff
+.quarto/
+_site/

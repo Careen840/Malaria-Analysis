@@ -1,18 +1,19 @@
 ---
-title: "SADC Malaria Incidence"
+title: "SADC Malaria Incidence Trends and Inequalities (2000–2024)"
 author: "Careen Evans Joseph"
 date: "2026-09-18"
-output:
-  html_document:
+output-dir: docs
+format:
+  html:
+    theme: cosmo
     toc: true
-    toc_depth: 3
-    toc_float:
-      collapsed: false
-      smooth_scroll: true
-    theme: flatly
-    highlight: tango
-    code_folding: hide
-    df_print: paged
+    toc-depth: 3
+    code-fold: true
+    df-print: paged
+    fig-align: center
+execute:
+  warning: false
+  message: false
 ---
 
 **Research Question:** How have malaria incidence trends and inequalities evolved across SADC countries from 2000–2024?
@@ -30,13 +31,36 @@ knitr::opts_chunk$set(
 ```
 
 ```{r}
-library(tidyverse)
-library(broom)
-library(nlme)
-library(lme4)
-library(lmerTest)
-library(modelsummary)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
 
+# Ensure 'pacman' is installed to manage automatic installation and loading
+if (!requireNamespace("pacman", quietly = TRUE)) {
+  install.packages("pacman")
+}
+
+# Automatically install and load all required packages
+pacman::p_load(
+  tidyverse,      # Data manipulation and visualization
+  sf,             # Spatial data handling
+  terra,          # Raster data processing
+  tidyterra,      # Spatial plotting with ggplot2
+  broom,          # Model tidying (fixes 'tidy' method error)
+  ggrepel,        # Non-overlapping text labels
+  lme4,           # Mixed-effects models (lmer)
+  nlme,           # GLS and spatial/temporal autocorrelation models
+  modelsummary,   # Formatted model summary tables
+  emmeans         # Estimated marginal means and trend slopes
+)
+
+# Install and load 'malariaAtlas' from CRAN/GitHub if missing
+if (!requireNamespace("malariaAtlas", quietly = TRUE)) {
+  renv::install("malariaAtlas")
+}
+library(malariaAtlas)
 ```
 
 # Loading the data
@@ -1273,11 +1297,9 @@ ggsave(
 ```
 
 ```{r}
-ggsave(
-  "03_output/figures/map_malaria_incidence_change_2000_2024.png",
+ggsave("03_output/figures/map_malaria_incidence_change_2000_2024.png",
   map_change,
   width = 9,
   height = 7,
-  dpi = 300
-)
+  dpi = 300)
 ```

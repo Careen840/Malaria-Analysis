@@ -936,7 +936,7 @@ ggplot(
 ```
 
 
-# Check whether the relationship with time is linear
+# Checking whether the relationship with time is linear
 
 
 ```{r}
@@ -1010,7 +1010,6 @@ final_descriptive_table
 # Final country trend table
 
 ```{r}
-
 final_trend_table <- country_APC %>%
   mutate(annual_percent_change = round(annual_percent_change,2))
 
@@ -1022,8 +1021,7 @@ final_trend_table
 
 ```{r}
 
-
-#dir.create("02_data/processed", recursive = TRUE, showWarnings = FALSE)
+dir.create("02_data/processed", recursive = TRUE, showWarnings = FALSE)
 
 # Save results
 write_csv(final_descriptive_table, "02_data/processed/SADC_malaria_descriptive_results.csv")
@@ -1033,7 +1031,7 @@ write_csv(final_trend_table, "02_data/processed/SADC_malaria_country_trends.csv"
 
 
 ```{r}
-#if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
+if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
 
 ggsave("03_output/figures/malaria_trends.png",
   plot = Malaria_SADC,
@@ -1316,8 +1314,7 @@ dev.off()
 
 
 ```{r}
-
-#if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
+if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
 
 ggsave(
   "03_output/figures/map_MAP_Pf_incidence_2024.png",
