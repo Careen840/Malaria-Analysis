@@ -1,0 +1,1306 @@
+---
+title: "SADC Malaria Incidence"
+author: "Careen Evans Joseph"
+date: "2026-09-18"
+output: html_document
+---
+
+**Research Question:**
+How have malaria incidence trends and inequalities evolved across SADC countries from 2000–2024?
+
+## Setup
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+
+```
+
+```{r}
+library(tidyverse)
+library(broom)
+library(nlme)
+library(lme4)
+library(lmerTest)
+
+```
+
+
+# Loading the data
+
+```{r}
+
+malaria_inc <- read_csv("/Users/careenevansjoseph/Downloads/incidence-of-malaria/Malaria incidence.csv",show_col_types = FALSE)
+
+glimpse(malaria_inc)
+
+```
+
+
+```{r}
+
+malaria_full <- malaria_inc %>%
+  setNames(c("country", "code", "year", "incidence"))
+
+glimpse(malaria_full)
+
+```
+
+
+# Data inspection
+
+## Study period
+
+```{r}
+
+range(malaria_full$year,na.rm = TRUE)
+
+```
+
+## Number of countries
+
+```{r}
+
+malaria_full %>% summarise(n_countries = n_distinct(country))
+
+```
+
+## Country coverage
+
+```{r}
+
+country_coverage <- malaria_full %>%
+  group_by(country) %>%
+  summarise(
+    first_year = min(year, na.rm = TRUE),
+    last_year = max(year, na.rm = TRUE),
+    n_years = n_distinct(year),
+    .groups = "drop"
+  ) %>%
+  arrange(country)
+
+country_coverage
+
+```
+
+## Missing values
+
+```{r}
+
+malaria_full %>%
+  summarise(
+    missing_country = sum(is.na(country)),
+    missing_code = sum(is.na(code)),
+    missing_year = sum(is.na(year)),
+    missing_incidence = sum(is.na(incidence))
+  )
+
+```
+
+
+```{r}
+
+malaria_full %>%
+  count(country, year) %>%
+  filter(n > 1)
+
+```
+
+
+# Defining SADC countries
+
+```{r}
+
+SADC_countries <- c(
+  "Angola", "Botswana", "Comoros", 
+  "Democratic Republic of the Congo",
+  "Eswatini", "Lesotho", "Madagascar", "Malawi", "Mauritius", 
+  "Mozambique", "Namibia", "Seychelles", "South Africa", 
+  "Tanzania", "Zambia", "Zimbabwe"
+)
+
+```
+
+Check which SADC countries are missing from the dataset:
+
+```{r}
+
+setdiff(
+  SADC_countries,
+  unique(malaria_full$country)
+)
+
+```
+
+
+
+```{r}
+
+malaria_sadc_data <- malaria_full %>%
+  filter(country %in% SADC_countries)
+
+```
+
+
+
+```{r}
+
+malaria_sadc_data %>%
+  summarise(
+    n_countries = n_distinct(country),
+    n_observations = n()
+  )
+
+```
+
+
+# SADC country coverage
+
+```{r}
+
+SADC_coverage <- malaria_sadc_data %>%
+  group_by(country) %>%
+  summarise(
+    first_year = min(year, na.rm = TRUE),
+    last_year = max(year, na.rm = TRUE),
+    n_years = n_distinct(year),
+    .groups = "drop"
+  ) %>%
+  arrange(country)
+
+SADC_coverage
+
+```
+
+Number of observations per country:
+
+```{r}
+
+malaria_sadc_data %>%
+  count(country)
+
+```
+
+
+# Missing values
+
+```{r}
+
+malaria_sadc_data %>%
+  summarise(
+    total = n(),
+    missing_incidence = sum(is.na(incidence)),
+    missing_year = sum(is.na(year))
+  )
+
+```
+
+
+# Descriptive statistics
+
+```{r}
+
+SADC_descriptive <- malaria_sadc_data %>%
+  group_by(country) %>%
+  summarise(minimum = min(incidence, na.rm = TRUE),
+    median = median(incidence, na.rm = TRUE),
+    mean = mean(incidence, na.rm = TRUE),
+    maximum = max(incidence, na.rm = TRUE),
+    sd = sd(incidence, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+SADC_descriptive
+
+```
+
+
+# Distribution of malaria incidence
+
+## Histogram
+
+```{r}
+
+ggplot(
+  malaria_sadc_data,
+  aes(x = incidence)
+) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribution of malaria incidence",
+    x = "Malaria incidence per 1,000 population at risk",
+    y = "Number of observations"
+  ) +
+  theme_minimal()
+
+```
+
+## Log-scale histogram
+
+Because incidence differs between countries
+
+```{r}
+
+ggplot(malaria_sadc_data,
+  aes(x = incidence)) +
+  geom_histogram(bins = 30) +
+  scale_x_log10() +
+  labs(title = "Distribution of malaria incidence on a log scale",
+    x = "Malaria incidence per 1,000 population at risk (log scale)",
+    y = "Number of observations") +
+  theme_minimal()
+
+```
+
+
+# Distribution by country
+
+```{r}
+
+ggplot(malaria_sadc_data,
+  aes(x = incidence)) +
+  geom_boxplot() +
+  facet_wrap(~ country, scales = "free") +
+  labs(title = "Distribution of malaria incidence by country",
+    x = "Country",
+    y = "Malaria incidence per 1,000 population at risk"
+  ) +
+  theme_minimal()
+
+```
+
+
+# log incidence
+
+```{r}
+
+summary(malaria_sadc_data$incidence)
+
+```
+
+
+```{r}
+
+sum(malaria_sadc_data$incidence <= 0, na.rm = TRUE)
+
+```
+
+```{r}
+
+malaria_sadc_data <- malaria_sadc_data %>%
+  mutate(
+    log_incidence = log(incidence)
+  )
+
+```
+
+The log transformation allows to model **relative changes in incidence** and reduces the influence of very high-incidence observations.
+
+
+# Visualizing malaria incidence over time
+## All countries
+
+```{r}
+
+Malaria_SADC <- ggplot(
+  malaria_sadc_data,
+  aes(
+    x = year,
+    y = incidence,
+    color = country
+  )
+) +
+  geom_line(linewidth = 0.8) +
+  labs(
+    title = "Malaria incidence in SADC countries, 2000–2024",
+    x = "Year",
+    y = "Malaria incidence per 1,000 population at risk",
+    color = "Country"
+  ) +
+  theme_minimal()
+
+Malaria_SADC
+
+```
+
+```{r}
+SADC_ISO <- c("AGO", "BWA", "COM", "COD","SWZ", "LSO", "MDG", "MWI",
+  "MUS", "MOZ", "NAM", "SYC","ZAF", "TZA", "ZMB", "ZWE")
+```
+
+
+
+```{r}
+#Downloading SADC country boundaries from MAP
+
+sadc_shp <- getShp(ISO = SADC_ISO, admin_level = "admin0")
+
+#checking the boundaries
+sadc_shp
+```
+
+```{r}
+pf_incidence_2024 <- getRaster(dataset_id = "Malaria__202608_Global_Pf_Incidence_Rate", shp = sadc_shp, year = 2024)
+
+pf_incidence_2024
+```
+
+
+```{r}
+
+names(pf_incidence_2024)[1] <- "incidence"
+
+# Plot using the clean name
+map_2024 <- ggplot() + 
+  geom_spatraster(data = pf_incidence_2024, aes(fill = incidence)) + 
+  geom_sf(data = sadc_shp, fill = NA, colour = "black", linewidth = 0.3) + 
+  
+  scale_fill_viridis_c(name = "Incidence\nper 1,000", na.value = "grey90") +
+  
+  labs(
+    title = "Modelled P. falciparum malaria incidence in SADC, 2024",
+    subtitle = "Malaria Atlas Project (MAP)",
+    caption = "Source: Malaria Atlas Project"
+  ) +
+  
+  coord_sf(expand = FALSE) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 15, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9), 
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+
+map_2024
+```
+
+```{r}
+library(ggrepel)
+
+sadc_labels <- sadc_shp %>%
+  st_point_on_surface()
+
+map_2024_labeled <- map_2024 +
+  geom_sf_text(
+    data = sadc_labels,
+    aes(label = name_0),
+    size = 2.5
+  )
+
+map_2024_labeled
+```
+
+
+# Country-specific trends
+
+
+```{r}
+
+country_trends <- malaria_sadc_data %>%
+  group_by(country) %>%
+  do(
+    tidy(
+      lm(incidence ~ year, data = .),
+      conf.int = TRUE
+    )
+  )
+
+```
+ 
+year coefficients:
+
+```{r}
+
+country_trends_year <- country_trends %>%
+  filter(term == "year") %>%
+  select(
+    country,
+    estimate,
+    std.error,
+    statistic,
+    p.value,
+    conf.low,
+    conf.high
+  ) %>%
+  mutate(
+    across(
+      c(estimate, std.error, statistic, p.value, conf.low, conf.high),
+      ~ round(.x, 2)
+    )
+  )
+
+country_trends_year
+
+```
+
+
+# Visualizing country-specific linear trends
+
+```{r}
+
+ggplot(
+  malaria_sadc_data,
+  aes(
+    x = year,
+    y = incidence
+  )
+) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(
+    method = "lm",
+    se = TRUE
+  ) +
+  facet_wrap(
+    ~ country,
+    scales = "free_y"
+  ) +
+  labs(
+    title = "Country-specific malaria incidence trends",
+    x = "Year",
+    y = "Malaria incidence per 1,000 population at risk"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+# Change between 2000 and 2024
+
+```{r}
+
+SADC_change <- malaria_sadc_data %>%
+  filter(year %in% c(2000, 2024)) %>%
+  select(country, year, incidence) %>%
+  pivot_wider(
+    names_from = year,
+    names_prefix = "Y",
+    values_from = incidence
+  ) %>%
+  mutate(
+    incidence_ratio = Y2024 / Y2000,
+    log_incidence_ratio = log(Y2024 / Y2000),
+    percent_change = ((Y2024 - Y2000) / Y2000) * 100
+  )
+
+#  results
+SADC_change
+
+```
+
+Plot:
+
+```{r}
+
+SADC_change %>%
+  ggplot(
+    aes(
+      reorder(country, percent_change),
+      percent_change
+    )
+  ) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Change in malaria incidence in SADC countries, 2000–2024",
+    x = "Country",
+    y = "Percentage change in incidence"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+# Joining incidence change to SADC map
+sadc_change_map <- sadc_shp %>%
+  left_join(SADC_change, by = c("name_0" = "country"))
+```
+
+
+```{r}
+# Plotting percentage change
+map_change <- ggplot(sadc_change_map) +
+
+  geom_sf(aes(fill = percent_change), colour = "black",linewidth = 0.3) +
+
+  scale_fill_gradient2(name = "Change (%)", midpoint = 0, na.value = "grey90") +
+
+  labs(title = "Change in malaria incidence across SADC",
+    subtitle = "2000–2024",
+    caption = "Source: The Institute for Health Metrics and Evaluation (IHME), University of Washington.") +
+
+  theme_minimal() +
+
+  theme(plot.title = element_text(
+      size = 15,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      size = 11
+    ),
+    legend.title = element_text(
+      size = 10
+    ),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+
+map_change
+```
+
+
+```{r}
+map_change <- ggplot(sadc_change_map) +
+
+  geom_sf(aes(fill = log_incidence_ratio),
+    colour = "white",
+    linewidth = 0.4) +
+
+  scale_fill_gradient2(
+    name = "Log incidence ratio",
+    midpoint = 0,
+    na.value = "grey90") +
+
+  labs(title = "Change in malaria incidence across SADC",
+    subtitle = "2000–2024",
+    caption = "Source: The Institute for Health Metrics and Evaluation (IHME), University of Washington.") +
+
+  theme_minimal() +
+
+  theme(plot.title = element_text(
+      size = 15,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      size = 11
+    ),
+    legend.title = element_text(
+      size = 10
+    ),
+    legend.text = element_text(
+      size = 9
+    ),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank()
+  )
+
+map_change
+```
+
+# Longitudinal mixed-effects model
+
+Now we move to the **main longitudinal analysis**.
+
+First, a random-intercept model:
+
+```{r}
+
+mixed_model_1 <- lmer(log_incidence ~ year + (1 | country),data = malaria_sadc_data,REML = TRUE)
+
+summary(mixed_model_1)
+
+```
+
+### Interpretation
+
+This model estimates the overall temporal trend while allowing countries to have different baseline incidence levels.
+
+
+# Allow countries to have different trends
+
+```{r}
+
+mixed_model_2 <- lmer(log_incidence ~ year + (year | country), data = malaria_sadc_data,REML = TRUE)
+
+summary(mixed_model_2)
+
+```
+
+
+#  Comparing the mixed models
+
+```{r}
+
+anova(
+  mixed_model_1,
+  mixed_model_2
+)
+
+```
+
+# changing the overall time coefficient to annual percentage change
+
+Extract the year coefficient:
+
+```{r}
+
+year_coefficient <- fixef(mixed_model_2)["year"]
+
+year_coefficient
+
+```
+
+Converting it to an approximate annual percentage change:
+
+```{r}
+
+annual_percent_change <- (exp(year_coefficient) - 1) * 100
+
+annual_percent_change
+
+```
+
+
+```{r}
+
+round(annual_percent_change, 2)
+
+```
+
+
+# Model assumptions
+
+## Residual vs fitted values
+
+```{r}
+plot(mixed_model_2, resid(., type = "pearson") ~ fitted(.), abline = 0)
+```
+
+## Normal Q-Q plot
+
+```{r}
+
+qqnorm(resid(mixed_model_2))
+
+qqline(resid(mixed_model_2))
+
+```
+
+## Residual distribution
+
+```{r}
+
+ggplot(data.frame(residuals = resid(mixed_model_2)),
+  aes(x = residuals)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribution of model residuals",
+    x = "Residuals",
+    y = "Number of observations") +
+  theme_minimal()
+
+```
+
+# Temporal autocorrelation
+
+```{r}
+
+residual_data <- malaria_sadc_data %>%
+  mutate(residual = residuals(mixed_model_2),
+    fitted = fitted(mixed_model_2))
+
+ggplot(
+  residual_data,
+  aes(x = year,y = residual)) +
+  geom_point() +
+  geom_hline(yintercept = 0,linetype = "dashed") +
+  facet_wrap(~ country) +
+  labs(title = "Residuals over time by country",x = "Year",y = "Model residual") +
+  theme_minimal()
+
+```
+
+# Model with AR(1) temporal correlation
+
+Because measurements close together in time within a country may be correlated, we can explicitly model this using an AR(1) correlation structure.
+
+```{r}
+
+ar1_model <- gls(log_incidence ~ year + country, correlation = corAR1(form = ~ year | country),
+  data = malaria_sadc_data, method = "REML")
+
+summary(ar1_model)
+
+```
+
+This model accounts for the fact that:
+
+> incidence in a country in one year may be correlated with incidence in the previous year. Relevant for a 2000–2024 country panel.
+
+
+# Country-specific trends with temporal correlation
+
+ Qn:
+> Do malaria incidence trends differ between SADC countries?
+
+
+```{r}
+
+ar1_interaction_model <- gls(log_incidence ~ year * country, correlation = corAR1(form = ~ year | country),
+  data = malaria_sadc_data, method = "REML")
+
+summary(ar1_interaction_model)
+
+```
+
+
+# Comparing models
+
+```{r}
+anova(ar1_model, ar1_interaction_model)
+```
+
+
+# country-specific annual trends
+```{r}
+library(emmeans)
+```
+
+
+```{r}
+country_slopes <- emtrends(ar1_interaction_model, ~ country, var = "year")
+
+country_slopes
+
+```
+
+Confidence interval
+
+```{r}
+
+country_slopes_ci <- summary(country_slopes, infer = TRUE)
+country_slopes_ci
+```
+
+Converting the log slopes to annual percentage changes
+
+```{r}
+country_APC <- country_slopes_ci %>%
+  as.data.frame() %>%
+  mutate(
+    annual_percent_change =
+      (exp(year.trend) - 1) * 100
+  ) %>%
+  select(country,year.trend,SE,lower.CL,upper.CL,annual_percent_change)
+
+country_APC
+
+```
+
+
+```{r}
+
+country_APC %>%
+  mutate(
+    across(
+      where(is.numeric),
+      ~ round(.x, 2)
+    )
+  )
+
+```
+
+
+# Inequality between SADC countries
+
+```{r}
+
+annual_inequality <- malaria_sadc_data %>%
+  group_by(year) %>%
+  summarise(
+    mean_incidence = mean(incidence, na.rm = TRUE),
+    median_incidence = median(incidence, na.rm = TRUE),
+    sd_incidence = sd(incidence, na.rm = TRUE),
+    q25 = quantile(incidence, 0.25, na.rm = TRUE),
+    q75 = quantile(incidence, 0.75, na.rm = TRUE),
+    min_incidence = min(incidence, na.rm = TRUE),
+    max_incidence = max(incidence, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+annual_inequality
+
+```
+
+
+# Plotting the annual range of incidence
+
+```{r}
+
+ggplot(
+  annual_inequality,
+  aes(x = year)
+) +
+  geom_ribbon(
+    aes(
+      ymin = q25,
+      ymax = q75
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(y = median_incidence),
+    linewidth = 1
+  ) +
+  labs(
+    title = "Distribution of malaria incidence across SADC countries over time",
+    x = "Year",
+    y = "Malaria incidence per 1,000 population at risk",
+    caption = "Line shows the annual median; shaded area shows the interquartile range."
+  ) +
+  theme_minimal()
+
+```
+
+
+#  Inequality on the log scale
+
+```{r}
+
+annual_log_inequality <- malaria_sadc_data %>%
+  group_by(year) %>%
+  summarise(
+    mean_log_incidence = mean(log_incidence, na.rm = TRUE),
+    median_log_incidence = median(log_incidence, na.rm = TRUE),
+    sd_log_incidence = sd(log_incidence, na.rm = TRUE),
+    q25 = quantile(log_incidence, 0.25, na.rm = TRUE),
+    q75 = quantile(log_incidence, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+
+```{r}
+
+ggplot(
+  annual_log_inequality,
+  aes(x = year)
+) +
+  geom_ribbon(
+    aes(
+      ymin = q25,
+      ymax = q75
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(y = median_log_incidence),
+    linewidth = 1
+  ) +
+  labs(
+    title = "Relative distribution of malaria incidence across SADC countries",
+    x = "Year",
+    y = "Log malaria incidence"
+  ) +
+  theme_minimal()
+
+```
+
+
+# Check whether the relationship with time is linear
+
+
+```{r}
+
+ggplot(
+  malaria_sadc_data,
+  aes(
+    x = year,
+    y = log_incidence
+  )
+) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(
+    method = "loess",
+    se = TRUE
+  ) +
+  labs(
+    title = "Overall temporal pattern of malaria incidence",
+    x = "Year",
+    y = "Log malaria incidence"
+  ) +
+  theme_minimal()
+
+```
+
+
+# Nonlinear sensitivity analysis
+
+
+```{r}
+
+nonlinear_model <- gls(
+  log_incidence ~ year + I(year^2) + country,
+  correlation = corAR1(
+    form = ~ year | country
+  ),
+  data = malaria_sadc_data,
+  method = "REML"
+)
+
+summary(nonlinear_model)
+
+```
+
+
+```{r}
+anova(
+  ar1_model,
+  nonlinear_model
+)
+
+```
+
+
+# Final descriptive table
+
+```{r}
+
+final_descriptive_table <- SADC_descriptive %>%
+  left_join(
+    SADC_change,
+    by = "country"
+  ) %>%
+  select(country,minimum,median,mean,maximum,sd,Y2000,Y2024,incidence_ratio,percent_change)
+
+final_descriptive_table
+
+```
+
+
+# Final country trend table
+
+```{r}
+
+final_trend_table <- country_APC %>%
+  mutate(annual_percent_change = round(annual_percent_change,2))
+
+final_trend_table
+
+```
+
+# Save results
+
+```{r}
+
+write_csv(final_descriptive_table,"02_data/processed/SADC_malaria_descriptive_results.csv")
+
+write_csv(final_trend_table,"02_data/processed/SADC_malaria_country_trends.csv")
+
+```
+
+
+```{r}
+#dir.create("figures", showWarnings = FALSE)
+
+ggsave("03_output/figures/malaria_trends.png",
+  plot = Malaria_SADC,
+  width = 10,
+  height = 7,
+  dpi = 300)
+
+
+p <- ggplot(
+  malaria_sadc_data,
+  aes(x = incidence)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribution of malaria incidence",
+    x = "Malaria incidence per 1,000 population at risk",
+    y = "Number of observations") +
+  theme_minimal()
+
+ggsave("03_output/figures/incidence_distribution.png",plot = p, width = 10, height = 7, dpi = 300)
+
+
+p <- ggplot(
+  malaria_sadc_data,
+  aes(x = incidence)) +
+  geom_histogram(bins = 30) +
+  scale_x_log10() +
+  labs(title = "Distribution of malaria incidence on a log scale",
+    x = "Malaria incidence per 1,000 population at risk (log scale)",
+    y = "Number of observations") +
+  theme_minimal()
+
+ggsave("03_output/figures/incidence_log_distribution.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300)
+
+
+
+p <- ggplot(malaria_sadc_data,
+  aes(x = incidence)) +
+  geom_boxplot() +
+  facet_wrap(~ country, scales = "free") +
+  labs(title = "Distribution of malaria incidence by country",
+    x = "Country",
+    y = "Malaria incidence per 1,000 population at risk") +
+  theme_minimal()
+
+ggsave("03_output/figures/country_distribution.png",
+  plot = p,
+  width = 12,
+  height = 8,
+  dpi = 300)
+
+
+# Country-specific linear trends
+p <- ggplot(
+  malaria_sadc_data,
+  aes(x = year,
+    y = incidence)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(
+    method = "lm",
+    se = TRUE) +
+  facet_wrap(~ country,
+    scales = "free_y") +
+  labs(title = "Country-specific malaria incidence trends",
+    x = "Year",
+    y = "Malaria incidence per 1,000 population at risk") +
+  theme_minimal()
+
+ggsave(
+  "03_output/figures/country_trends.png",
+  plot = p,
+  width = 12,
+  height = 10,
+  dpi = 300
+)
+
+
+# Change between 2000 and 2024
+p <- SADC_change %>%
+  ggplot(
+    aes(reorder(country, percent_change),
+      percent_change)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Change in malaria incidence in SADC countries, 2000–2024",
+    x = "Country",
+    y = "Percentage change in incidence") +
+  theme_minimal()
+
+ggsave("03_output/figures/change_2000_2024.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300)
+
+
+# Residual distribution
+p <- ggplot(
+  data.frame(residuals = resid(mixed_model_2)),
+  aes(x = residuals)
+) +
+  geom_histogram(bins = 30) +
+  labs(
+    title = "Distribution of model residuals",
+    x = "Residuals",
+    y = "Number of observations"
+  ) +
+  theme_minimal()
+
+ggsave("03_output/figures/residual_distribution.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
+# Residuals over time
+residual_data <- malaria_sadc_data %>%
+  mutate(
+    residual = residuals(mixed_model_2),
+    fitted = fitted(mixed_model_2)
+  )
+
+p <- ggplot(
+  residual_data,
+  aes(
+    x = year,
+    y = residual
+  )
+) +
+  geom_point() +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed"
+  ) +
+  facet_wrap(~ country) +
+  labs(
+    title = "Residuals over time by country",
+    x = "Year",
+    y = "Model residual"
+  ) +
+  theme_minimal()
+
+ggsave(
+  "03_output/figures/residuals_over_time.png",
+  plot = p,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+
+
+# Inequality over time
+p <- ggplot(
+  annual_inequality,
+  aes(x = year)
+) +
+  geom_ribbon(
+    aes(
+      ymin = q25,
+      ymax = q75
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(y = median_incidence),
+    linewidth = 1
+  ) +
+  labs(
+    title = "Distribution of malaria incidence across SADC countries over time",
+    x = "Year",
+    y = "Malaria incidence per 1,000 population at risk",
+    caption = "Line shows the annual median; shaded area shows the interquartile range."
+  ) +
+  theme_minimal()
+
+ggsave(
+  "03_output/figures/inequality.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
+# Inequality on log scale
+p <- ggplot(
+  annual_log_inequality,
+  aes(x = year)
+) +
+  geom_ribbon(
+    aes(
+      ymin = q25,
+      ymax = q75
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(y = median_log_incidence),
+    linewidth = 1
+  ) +
+  labs(
+    title = "Relative distribution of malaria incidence across SADC countries",
+    x = "Year",
+    y = "Log malaria incidence"
+  ) +
+  theme_minimal()
+
+ggsave(
+  "03_output/figures/log_inequality.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
+# LOESS temporal pattern
+p <- ggplot(
+  malaria_sadc_data,
+  aes(
+    x = year,
+    y = log_incidence
+  )
+) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(
+    method = "loess",
+    se = TRUE
+  ) +
+  labs(
+    title = "Overall temporal pattern of malaria incidence",
+    x = "Year",
+    y = "Log malaria incidence"
+  ) +
+  theme_minimal()
+
+ggsave(
+  "03_output/figures/temporal_pattern_loess.png",
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
+# Residuals vs fitted values
+png(
+  "03_output/figures/residuals_vs_fitted.png",
+  width = 2000,
+  height = 1600,
+  res = 300
+)
+
+plot(
+  mixed_model_2,
+  resid(., type = "pearson") ~ fitted(.),
+  abline = 0
+)
+
+dev.off()
+
+
+# Normal Q-Q plot
+png(
+  "03_output/figures/normal_qq_plot.png",
+  width = 2000,
+  height = 1600,
+  res = 300
+)
+
+qqnorm(resid(mixed_model_2))
+qqline(resid(mixed_model_2))
+
+dev.off()
+```
+
+
+```{r}
+
+#if (!dir.exists("figures")) {dir.create("figures")}
+
+ggsave(
+  "03_output/figures/map_MAP_Pf_incidence_2024.png",
+  map_2024,
+  width = 9,
+  height = 7,
+  dpi = 300
+)
+```
+
+
+
+```{r}
+ggsave(
+  "03_output/figures/map_malaria_incidence_change_2000_2024.png",
+  map_change,
+  width = 9,
+  height = 7,
+  dpi = 300
+)
+```

@@ -1,0 +1,170 @@
+---
+title: "Malaria Atlas – Tanzania Malaria Prevalence"
+author: "Careen Evans Joseph"
+date: "2026-09-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Set options for all R code chunks
+# echo = TRUE displays the R code in the HTML report
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = TRUE,
+  message = TRUE
+)
+
+```
+
+##Load the packages
+```{r}
+library(tidyverse)
+library(malariaAtlas)
+
+# Setting light theme as default
+theme_set(theme_light())
+```
+
+## Inspect the data
+
+```{r}
+#PR points for Tanzania, considering both Plasmodium falciparum and Plasmodium vivax
+Tz_pr <- malariaAtlas::getPR(country = "Tanzania", species = "BOTH") %>% filter(!is.na(pr))
+glimpse(Tz_pr)
+
+```
+
+```{r}
+names(Tz_pr)
+```
+
+```{r}
+head(Tz_pr)
+```
+
+```{r}
+# number of observations and variables
+dim(Tz_pr)
+```
+
+```{r}
+str(Tz_pr)
+```
+
+## Check for missing values
+
+```{r}
+# missing values in each variable
+Tz_pr %>% summarise(across(everything(),~ sum(is.na(.))))
+```
+
+```{r}
+# Check missing coordinates
+# Check specifically for missing geographic coordinates
+Tz_pr %>% summarise(missing_longitude = sum(is.na(longitude)), missing_latitude = sum(is.na(latitude)))
+```
+ 
+```{r}
+# time periods
+Tz_pr %>% summarise(first_year = min(year_start, na.rm = TRUE),last_year = max(year_start, na.rm = TRUE))
+```
+
+```{r}
+#number of observations available for each year
+
+Tz_pr %>% count(year_start) %>% arrange(year_start)
+```
+
+```{r}
+# sorting observations by the year the study started
+Tz_pr %>% arrange(year_start) %>% View()
+autoplot(Tz_pr)
+
+```
+
+```{r}
+# the distribution of malaria parasite rate 
+Tz_pr %>% summarise(minimum_PR = min(pr, na.rm = TRUE),
+                    lower_quartile = quantile(pr, 0.25, na.rm = TRUE),
+                    median_PR = median(pr, na.rm = TRUE),
+                    mean_PR = mean(pr, na.rm = TRUE),
+                    upper_quartile = quantile(pr, 0.75, na.rm = TRUE),
+                    maximum_PR = max(pr, na.rm = TRUE))
+```
+## Prevalence over time
+
+```{r}
+# Malaria prevalence over time for each year
+Tz_pr_year <- Tz_pr %>%
+  group_by(year_start) %>%
+  summarize(examined = sum(examined),
+            positive = sum(positive),
+            studies = n(), 
+            .groups = "drop") %>%
+  mutate(pr = positive/ examined)
+```
+
+```{r}
+ggplot(Tz_pr_year, aes(year_start, pr)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(
+    labels = scales::percent_format()
+  ) +
+  labs(title = "Malaria prevalence in Tanzania over time",
+    x = "Year",
+    y = "Malaria parasite rate"
+  )
+```
+```{r}
+# the number of PR observations available for each year.
+Tz_pr %>% count(year_start) %>%
+  ggplot(aes(year_start, n)) +
+  geom_col() +
+  labs(
+    title = "Number of malaria PR observations by year",
+    x = "Year",
+    y = "Number of observations"
+  )
+```
+## Geographical distirbuition
+
+
+```{r}
+# For All time prevalence 
+Tz_pr_distr <- Tz_pr %>%
+  arrange(pr) %>% 
+  ggplot(aes(longitude, latitude, color = pr)) + 
+  borders("world", regions = "Tanzania") +
+  geom_point() +
+  scale_color_gradient2(low = "blue", high ="red", midpoint = .5, labels = scales::percent_format()) +
+  theme_void() + 
+  coord_map()
+
+Tz_pr_distr
+```
+## Geographical distribuition by decade
+
+```{r}
+# Create decade variable
+Tz_pr_decade <- Tz_pr %>%
+  mutate(decade = floor(year_start / 10) * 10)
+
+# Check the decade categories
+table(Tz_pr_decade$decade)
+```
+
+```{r}
+# decade categories for each PR
+Tanzania_map <- getShp(country = "Tanzania")
+
+ggplot() +
+  geom_sf(data = Tanzania_map, fill = NA) +
+  geom_point(data = Tz_pr_decade, aes(x = longitude,y = latitude,color = pr)) +
+  scale_color_gradient2(low = "blue",mid = "white",high = "red",midpoint = 0.5,labels = scales::percent_format()) +
+  facet_wrap(~decade) +
+  theme_void() +
+  labs(title = "Malaria Prevalence in Tanzania",color = "Malaria PR"
+  )
+```
+
