@@ -43,19 +43,19 @@ The dataset can be accessed from the Institute for Health Metrics and Evaluation
 <table>
 <tr>
 <td align="center">
-<img src="malaria_trends.png" width="300">
+<img src="03_output/figures/malaria_trends.png" width="300">
 <br>
 <strong>Malaria incidence trends</strong>
 </td>
 
 <td align="center">
-<img src="country_trends.png" width="300">
+<img src="03_output/figures/country_trends.png" width="300">
 <br>
 <strong>Country-specific trends</strong>
 </td>
 
 <td align="center">
-<img src="change_2000_2024.png" width="300">
+<img src="03_output/figures/change_2000_2024.png" width="300">
 <br>
 <strong>Change, 2000–2024</strong>
 </td>
@@ -63,19 +63,19 @@ The dataset can be accessed from the Institute for Health Metrics and Evaluation
 
 <tr>
 <td align="center">
-<img src="inequality.png" width="300">
+<img src="03_output/figures/inequality.png" width="300">
 <br>
 <strong>Between-country inequality</strong>
 </td>
 
 <td align="center">
-<img src="map_MAP_Pf_incidence_2024.png" width="300">
+<img src="03_output/figures/map_MAP_Pf_incidence_2024.png" width="300">
 <br>
 <strong>2024 P. falciparum incidence</strong>
 </td>
 
 <td align="center">
-<img src="map_malaria_incidence_change_2000_2024.png" width="300">
+<img src="03_output/figures/map_malaria_incidence_change_2000_2024.png" width="300">
 <br>
 <strong>Incidence change, 2000–2024</strong>
 </td>
