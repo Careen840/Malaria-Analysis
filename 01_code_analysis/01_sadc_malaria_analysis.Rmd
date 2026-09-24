@@ -2,8 +2,19 @@
 title: "SADC Malaria Incidence"
 author: "Careen Evans Joseph"
 date: "2026-09-18"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+    df_print: paged
 ---
+
 
 **Research Question:**
 How have malaria incidence trends and inequalities evolved across SADC countries from 2000–2024?
@@ -26,6 +37,7 @@ library(broom)
 library(nlme)
 library(lme4)
 library(lmerTest)
+library(modelsummary)
 
 ```
 
@@ -604,7 +616,6 @@ First, a random-intercept model:
 
 mixed_model_1 <- lmer(log_incidence ~ year + (1 | country),data = malaria_sadc_data,REML = TRUE)
 
-summary(mixed_model_1)
 
 ```
 
@@ -619,8 +630,19 @@ This model estimates the overall temporal trend while allowing countries to have
 
 mixed_model_2 <- lmer(log_incidence ~ year + (year | country), data = malaria_sadc_data,REML = TRUE)
 
-summary(mixed_model_2)
+```
 
+```{r}
+modelsummary(
+  list(
+    "Random Intercept" = mixed_model_1,
+    "Random Slope & Intercept" = mixed_model_2
+  ),
+  stars = TRUE,
+  statistic = "conf.int",
+  gof_omit = "IC|Log|F",
+  title = "Table 1: Mixed-Effects Models for Malaria Log-Incidence"
+)
 ```
 
 
@@ -725,8 +747,6 @@ Because measurements close together in time within a country may be correlated, 
 ar1_model <- gls(log_incidence ~ year + country, correlation = corAR1(form = ~ year | country),
   data = malaria_sadc_data, method = "REML")
 
-summary(ar1_model)
-
 ```
 
 This model accounts for the fact that:
@@ -745,9 +765,20 @@ This model accounts for the fact that:
 ar1_interaction_model <- gls(log_incidence ~ year * country, correlation = corAR1(form = ~ year | country),
   data = malaria_sadc_data, method = "REML")
 
-summary(ar1_interaction_model)
-
 ```
+
+```{r}
+modelsummary(
+  list(
+    "AR(1) Main Effects" = ar1_model,
+    "AR(1) Interaction" = ar1_interaction_model
+  ),
+  stars = TRUE,
+  gof_omit = "IC|Log|F",
+  title = "Table 2: Generalized Least Squares Models with AR(1) Autocorrelation"
+)
+```
+
 
 
 # Comparing models
@@ -755,6 +786,7 @@ summary(ar1_interaction_model)
 ```{r}
 anova(ar1_model, ar1_interaction_model)
 ```
+
 
 
 # country-specific annual trends
@@ -990,15 +1022,18 @@ final_trend_table
 
 ```{r}
 
-write_csv(final_descriptive_table,"02_data/processed/SADC_malaria_descriptive_results.csv")
 
-write_csv(final_trend_table,"02_data/processed/SADC_malaria_country_trends.csv")
+#dir.create("02_data/processed", recursive = TRUE, showWarnings = FALSE)
+
+# Save results
+write_csv(final_descriptive_table, "02_data/processed/SADC_malaria_descriptive_results.csv")
+write_csv(final_trend_table, "02_data/processed/SADC_malaria_country_trends.csv")
 
 ```
 
 
 ```{r}
-#dir.create("figures", showWarnings = FALSE)
+#if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
 
 ggsave("03_output/figures/malaria_trends.png",
   plot = Malaria_SADC,
@@ -1282,7 +1317,7 @@ dev.off()
 
 ```{r}
 
-#if (!dir.exists("figures")) {dir.create("figures")}
+#if (!dir.exists("03_output/figures")) {dir.create("03_output/figures")}
 
 ggsave(
   "03_output/figures/map_MAP_Pf_incidence_2024.png",
